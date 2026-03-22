@@ -140,7 +140,7 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
         title: result.title,
         duration: result.duration,
         thumbnailUrl: result.thumbnailUrl,
-      } as any;
+      };
 
       // 视频下载链接
       if (wantsVideo) {

@@ -1,0 +1,20 @@
+#!/bin/sh
+# 小电驴项目部署脚本
+
+echo "=== 小电驴 项目部署脚本 ==="
+echo ""
+echo "你需要："
+echo "1. GitHub 账号（免费）"
+echo "2. Railway 账号（免费，每月 $5 额度）"
+echo ""
+echo "我帮你创建配置文件后，你需要："
+echo "1. 把代码推送到 GitHub"
+echo "2. 创建 Railway 账号"
+echo "3. 运行: railway login"
+echo "4. 运行: railway link"
+echo "5. 部署完成，得到公网 URL"
+echo ""
+echo "或者直接开放云服务器 3000 端口："
+echo "1. 云服务商控制台 → 安全组"
+echo "2. 添加入站规则：TCP 3000"
+echo "3. 保存后访问：http://216.181.107.159:3000"

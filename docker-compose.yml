@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  xiaodianlv:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ASR_MODE=local
+      - WHISPER_MODEL=base
+      - ASR_LANGUAGE=zh
+    volumes:
+      - ./downloads:/app/backend/downloads
+    restart: unless-stopped

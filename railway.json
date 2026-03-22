@@ -1,0 +1,23 @@
+{
+  "$schema": "https://railway.app/schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "services": {
+    "backend": {
+      "buildCommand": "cd backend && npm install && npm start",
+      "healthcheckPath": "/api/health",
+      "healthcheckTimeout": 60,
+      "healthcheckInterval": 20,
+      "minInstances": 1,
+      "maxInstances": 1,
+      "ports": {
+        "http": 3000
+      }
+    },
+    "frontend": {
+      "buildCommand": "cd frontend && npm install && npm run build",
+      "public": true
+    }
+  }
+}

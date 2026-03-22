@@ -1,12 +1,11 @@
 /**
- * 下载控制器 v2
+ * 下载控制器 v3
  * 
- * 改进：
- * 1. 使用 yt-dlp v2 的实时进度
- * 2. 支持封面和字幕
- * 3. 支持 getInfo 预览
- * 4. 修复 extractAudio 使用 fluent-ffmpeg
- * 5. 平台扩展：bilibili, kuaishou
+ * v3 改进：
+ * 1. 自动识别平台（前端驱动，后端兼容）
+ * 2. 支持 options 数组：video/copywriting/cover/asr/subtitle
+ * 3. 支持 saveTarget: phone/pc
+ * 4. 支持 copywriting（提取描述）、cover（封面下载）、subtitle（字幕下载）
  */
 
 const { v4: uuidv4 } = require('uuid');
@@ -28,7 +27,7 @@ async function createDownload(req, res) {
       return res.json({ code: 400, message: validation.message });
     }
 
-    const { url, platform, needAsr = false } = req.body;
+    const { url, platform, needAsr = false, options = ['video'], saveTarget = 'phone' } = req.body;
 
     const limitStatus = getLimiterStatus();
     if (limitStatus.queued >= 10) {
@@ -44,7 +43,9 @@ async function createDownload(req, res) {
       taskId,
       url: url.trim(),
       platform: finalPlatform,
-      needAsr,
+      needAsr: needAsr || options.includes('asr'),
+      options: Array.isArray(options) ? options : [options],
+      saveTarget,
       status: 'pending',
       progress: 0,
       createdAt: Date.now()
@@ -53,7 +54,7 @@ async function createDownload(req, res) {
     store.save(task);
 
     // 异步执行下载
-    processDownload(taskId, url, needAsr).catch(err => {
+    processDownload(taskId, url, task.needAsr, task.options).catch(err => {
       console.error(`[task] ${taskId} failed:`, err);
       store.update(taskId, {
         status: 'error',
@@ -96,41 +97,75 @@ async function getInfo(req, res) {
 /**
  * 处理下载任务（异步）
  */
-async function processDownload(taskId, url, needAsr) {
+async function processDownload(taskId, url, needAsr, options = ['video']) {
   try {
+    const wantsVideo = options.includes('video');
+    const wantsCopywriting = options.includes('copywriting');
+    const wantsCover = options.includes('cover');
+    const wantsSubtitle = options.includes('subtitle');
+
     // 1. 解析阶段
     store.update(taskId, { status: 'parsing', progress: 5 });
 
-    // 2. 下载阶段（带实时进度）
-    store.update(taskId, { status: 'downloading', progress: 10 });
+    let result = null;
 
-    const result = await downloadWithLimit(async () => {
-      return await executeWithRetry(async () => {
-        return await ytdlp.download(url, taskId, (percent, speed, eta) => {
-          store.update(taskId, {
-            status: 'downloading',
-            progress: percent,
-            speed,
-            eta
+    // 2. 下载视频（如果需要视频、封面、字幕或ASR，都需要先下载）
+    if (wantsVideo || wantsCover || wantsSubtitle || needAsr) {
+      store.update(taskId, { status: 'downloading', progress: 10 });
+
+      result = await downloadWithLimit(async () => {
+        return await executeWithRetry(async () => {
+          return await ytdlp.download(url, taskId, (percent, speed, eta) => {
+            store.update(taskId, {
+              status: 'downloading',
+              progress: percent,
+              speed,
+              eta
+            });
           });
         });
       });
-    });
 
-    store.update(taskId, {
-      status: 'completed',
-      progress: 100,
-      title: result.title,
-      filePath: result.filePath,
-      ext: result.ext,
-      thumbnailUrl: result.thumbnailUrl,
-      subtitleFiles: result.subtitleFiles || [],
-      duration: result.duration,
-      downloadUrl: `/download/${path.basename(result.filePath)}`
-    });
+      const update = {
+        status: 'completed',
+        progress: 100,
+        title: result.title,
+        duration: result.duration,
+        thumbnailUrl: result.thumbnailUrl,
+      } as any;
+
+      // 视频下载链接
+      if (wantsVideo) {
+        update.filePath = result.filePath;
+        update.ext = result.ext;
+        update.downloadUrl = `/download/${path.basename(result.filePath)}`;
+      }
+
+      // 封面
+      if (wantsCover && result.thumbnailUrl) {
+        update.coverUrl = result.thumbnailUrl;
+      }
+
+      // 字幕
+      if (wantsSubtitle && result.subtitleFiles && result.subtitleFiles.length > 0) {
+        update.subtitleFiles = result.subtitleFiles;
+      }
+
+      store.update(taskId, update);
+    } else if (wantsCopywriting) {
+      // 仅文案：获取信息不下载
+      const info = await ytdlp.getInfo(url);
+      store.update(taskId, {
+        status: 'completed',
+        progress: 100,
+        title: info.title,
+        duration: info.duration,
+        copyText: info.description || `标题: ${info.title}`,
+      });
+    }
 
     // 3. ASR（可选）
-    if (needAsr) {
+    if (needAsr && result) {
       store.update(taskId, { status: 'asr', progress: 100 });
 
       try {
@@ -162,7 +197,7 @@ async function processDownload(taskId, url, needAsr) {
       }
     }
 
-    console.log(`[task] ${taskId} completed: ${result.title}`);
+    console.log(`[task] ${taskId} completed`);
   } catch (error) {
     console.error(`[task] ${taskId} failed:`, error);
     store.update(taskId, {
@@ -222,6 +257,8 @@ function getStatus(req, res) {
       subtitleFiles: task.subtitleFiles || [],
       asrText: task.asrText,
       asrError: task.asrError,
+      copyText: task.copyText,
+      coverUrl: task.coverUrl,
       error: task.error,
       createdAt: task.createdAt
     }
@@ -255,7 +292,7 @@ function getSystemStatus(req, res) {
   res.json({
     code: 0,
     data: {
-      version: '1.2.0',
+      version: '2.0.0',
       concurrency: limiterStatus,
       totalTasks: tasks.length,
       activeTasks: tasks.filter(t =>

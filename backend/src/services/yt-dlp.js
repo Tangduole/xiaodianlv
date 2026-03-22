@@ -192,6 +192,7 @@ function getInfo(url) {
         const info = JSON.parse(stdout);
         resolve({
           title: info.title || 'unknown',
+          description: info.description || '',
           duration: info.duration || 0,
           thumbnail: info.thumbnail || '',
           uploader: info.uploader || '',

@@ -7,26 +7,16 @@ import {
   CheckCircle2, 
   XCircle, 
   Loader2,
-  Play,
-  FileText,
-  Music,
   Video,
-  Trash2,
+  Music,
+  Image as ImageIcon,
+  FileText,
+  Languages,
   ExternalLink,
   ChevronDown,
-  Sparkles,
-  Zap,
-  Youtube,
-  Twitter,
-  Music2,
-  Image as ImageIcon,
-  Type,
-  Languages,
-  Clock,
-  AlertCircle,
-  ArrowRight,
-  Copy,
-  Check
+  Trash2,
+  Scooter,
+  AlertCircle
 } from 'lucide-react'
 
 const API = '/api'
@@ -53,77 +43,34 @@ interface HistoryTask {
   createdAt: string
 }
 
-// 平台配置
+// 平台列表
 const PLATFORMS = [
-  { 
-    id: 'auto', 
-    label: '自动识别', 
-    icon: Zap, 
-    gradient: 'from-gray-500 to-gray-600',
-    bgColor: 'bg-gray-500',
-    description: '智能识别平台'
-  },
-  { 
-    id: 'douyin', 
-    label: '抖音', 
-    icon: Music2, 
-    gradient: 'from-pink-500 to-rose-600',
-    bgColor: 'bg-pink-500',
-    description: '抖音/TikTok中国版'
-  },
-  { 
-    id: 'tiktok', 
-    label: 'TikTok', 
-    icon: Music2, 
-    gradient: 'from-cyan-500 to-blue-600',
-    bgColor: 'bg-cyan-500',
-    description: '国际版抖音'
-  },
-  { 
-    id: 'x', 
-    label: 'X', 
-    icon: Twitter, 
-    gradient: 'from-gray-700 to-black',
-    bgColor: 'bg-gray-700',
-    description: '原Twitter'
-  },
-  { 
-    id: 'youtube', 
-    label: 'YouTube', 
-    icon: Youtube, 
-    gradient: 'from-red-500 to-red-700',
-    bgColor: 'bg-red-500',
-    description: '全球最大视频平台'
-  },
-  { 
-    id: 'bilibili', 
-    label: 'B站', 
-    icon: Play, 
-    gradient: 'from-pink-400 to-pink-600',
-    bgColor: 'bg-pink-400',
-    description: '哔哩哔哩'
-  },
+  { id: 'auto', label: 'Auto-detect', icon: '🎯' },
+  { id: 'youtube', label: 'YouTube', icon: '▶️' },
+  { id: 'tiktok', label: 'TikTok', icon: '🎵' },
+  { id: 'x', label: 'X / Twitter', icon: '🐦' },
+  { id: 'douyin', label: '抖音', icon: '📱' },
+  { id: 'bilibili', label: 'Bilibili', icon: '📺' },
 ]
 
 // 下载选项
 const DOWNLOAD_OPTIONS = [
-  { id: 'video', label: '视频文件', icon: Video, desc: 'MP4格式', color: 'blue' },
-  { id: 'audio', label: '音频文件', icon: Music, desc: 'MP3格式', color: 'purple' },
-  { id: 'cover', label: '封面图片', icon: ImageIcon, desc: 'JPG格式', color: 'green' },
-  { id: 'subtitle', label: '字幕文件', icon: Languages, desc: 'SRT格式', color: 'orange' },
+  { id: 'video', label: 'Download Video', format: 'MP4', icon: Video, description: 'Best quality available' },
+  { id: 'audio', label: 'Audio Only', format: 'MP3', icon: Music, description: 'Original sound only' },
+  { id: 'thumbnail', label: 'Video Thumbnail', format: 'JPG', icon: ImageIcon, description: 'High resolution cover' },
+  { id: 'transcription', label: 'Transcription TXT', format: 'TXT', icon: FileText, description: 'Speech to text' },
+  { id: 'subtitles', label: 'Subtitles', format: 'SRT/VTT', icon: Languages, description: 'Closed captions if available' },
 ]
 
 function App() {
   const [url, setUrl] = useState('')
   const [platform, setPlatform] = useState('auto')
-  const [needAsr, setNeedAsr] = useState(false)
   const [selectedOptions, setSelectedOptions] = useState(['video'])
   const [task, setTask] = useState<Task | null>(null)
   const [history, setHistory] = useState<HistoryTask[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showHistory, setShowHistory] = useState(false)
-  const [copied, setCopied] = useState(false)
 
   // 轮询任务状态
   useEffect(() => {
@@ -168,7 +115,7 @@ function App() {
       return
     }
     setLoading(true)
-    setError('请求发送中，如首次访问请等待几秒...')
+    setError('请求发送中，请稍等...')
     try {
       const res = await axios.post(`${API}/download`, { 
         url: url.trim(), 
@@ -179,9 +126,9 @@ function App() {
       setUrl('')
     } catch (e: any) {
       if (e.code === 'ECONNABORTED') {
-        setError('服务器响应超时，请稍后再试（免费服务可能需要冷启动）')
+        setError('服务器响应超时，请稍后再试')
       } else {
-        setError(e.response?.data?.message || '创建任务失败，请检查链接是否正确')
+        setError(e.response?.data?.message || '创建任务失败，请检查链接')
       }
     } finally {
       setLoading(false)
@@ -197,12 +144,6 @@ function App() {
     } catch (err) {
       console.error('删除失败:', err)
     }
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
 
   const toggleOption = (optionId: string) => {
@@ -228,79 +169,59 @@ function App() {
     }
   }
 
-  const getStatusText = (status: string) => {
-    const map: Record<string, string> = {
-      pending: '等待中',
-      processing: '处理中',
-      downloading: '下载中',
-      asr: '语音识别中',
-      completed: '已完成',
-      error: '失败',
-    }
-    return map[status] || status
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
       {/* Header */}
-      <header className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-orange-500 via-orange-400 to-pink-500" />
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-2xl mx-auto px-4 py-8 text-center">
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-1.5 mb-4">
-            <Sparkles className="w-4 h-4 text-white" />
-            <span className="text-white/90 text-sm font-medium">AI 加持 · 极速下载</span>
+      <header className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-orange-500/20 to-pink-500/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-blue-500/20 to-cyan-500/20 rounded-full blur-3xl" />
+        
+        <div className="relative max-w-4xl mx-auto px-6 py-12 text-center">
+          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-6 border border-white/10">
+            <Sparkles className="w-4 h-4 text-orange-400" />
+            <span className="text-white/90 text-sm font-medium">AI-Powered Video Downloader</span>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">🛵 小电驴</h1>
-          <p className="text-white/80 text-lg">多平台视频下载 + AI 语音转文字</p>
+          
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-orange-500/30">
+              <Scooter className="w-9 h-9 text-white" />
+            </div>
+          </div>
+          
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 tracking-tight">
+            Little Electric Donkey
+          </h1>
+          <p className="text-lg text-white/60 max-w-2xl mx-auto">
+            Professional video downloader supporting YouTube, TikTok, X/Twitter, and more.
+            <br />
+            <span className="text-orange-400">With AI-powered speech-to-text transcription.</span>
+          </p>
         </div>
-        {/* Wave decoration */}
+        
+        {/* Bottom wave */}
         <div className="absolute bottom-0 left-0 right-0">
-          <svg viewBox="0 0 1440 60" fill="none" className="w-full">
-            <path fill="url(#gradient)" d="M0,20 C360,60 720,0 1080,20 C1260,30 1380,10 1440,20 L1440,60 L0,60 Z" />
+          <svg viewBox="0 0 1440 80" fill="none" className="w-full">
+            <path fill="url(#wave-gradient)" d="M0,40 C360,80 720,0 1080,40 C1260,60 1380,20 1440,40 L1440,80 L0,80 Z" />
             <defs>
-              <linearGradient id="gradient" x1="0" y1="0" x2="1440" y2="0">
-                <stop offset="0%" stopColor="#FFF7ED" />
-                <stop offset="100%" stopColor="#F9FAFB" />
+              <linearGradient id="wave-gradient" x1="0" y1="0" x2="1440" y2="0">
+                <stop offset="0%" stopColor="#f8fafc" />
+                <stop offset="50%" stopColor="#ffffff" />
+                <stop offset="100%" stopColor="#f8fafc" />
               </linearGradient>
             </defs>
           </svg>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-        {/* 输入卡片 */}
-        <div className="bg-white rounded-3xl shadow-lg shadow-orange-100/50 p-6 border border-orange-100">
-          <div className="flex items-center gap-2 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
-              <Link2 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-800">下载视频</h2>
-              <p className="text-sm text-gray-500">支持抖音、YouTube、X 等平台</p>
-            </div>
-          </div>
-
-          {/* 输入框 */}
-          <div className="relative mb-4">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-              <Link2 className="w-5 h-5" />
-            </div>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="粘贴视频分享链接..."
-              className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none text-gray-800 text-base transition-all"
-            />
-          </div>
-
-          {/* 平台选择 */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm font-medium text-gray-700">选择平台</span>
-              <span className="text-xs text-gray-400">自动识别推荐</span>
-            </div>
+      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+        {/* URL Input Card */}
+        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-6 border border-slate-100">
+          {/* Platform Selection */}
+          <div className="mb-5">
+            <label className="block text-sm font-semibold text-slate-700 mb-3">
+              Select Platform
+            </label>
             <div className="flex flex-wrap gap-2">
               {PLATFORMS.map((p) => {
                 const Icon = p.icon
@@ -308,82 +229,134 @@ function App() {
                   <button
                     key={p.id}
                     onClick={() => setPlatform(p.id)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                       platform === p.id
-                        ? `bg-gradient-to-r ${p.gradient} text-white shadow-md shadow-${p.color.split('-')[1]}-200`
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? `bg-gradient-to-r ${p.gradient} text-white shadow-lg shadow-${p.color.split('-')[1]}-200`
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
+                    title={p.description}
                   >
                     <Icon className="w-4 h-4" />
-                    {p.label}
+                    <span className="hidden sm:inline">{p.label}</span>
+                    <span className="sm:hidden">{p.icon}</span>
                   </button>
                 )
               })}
             </div>
           </div>
 
-          {/* ASR 开关 */}
-          <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl hover:bg-purple-50 transition-colors">
-            <div className={`w-12 h-6 rounded-full p-1 transition-colors ${needAsr ? 'bg-purple-500' : 'bg-gray-200'}`}>
-              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${needAsr ? 'translate-x-6' : 'translate-x-0'}`} />
-            </div>
-            <input
-              type="checkbox"
-              checked={needAsr}
-              onChange={(e) => setNeedAsr(e.target.checked)}
-              className="hidden"
-            />
-            <div className="flex items-center gap-2">
-              <Mic className={`w-5 h-5 ${needAsr ? 'text-purple-500' : 'text-gray-400'}`} />
-              <div>
-                <span className={`font-medium ${needAsr ? 'text-purple-700' : 'text-gray-600'}`}>
-                  语音转文字
-                </span>
-                <span className="text-xs text-gray-400 block">AI 自动提取视频中的语音内容</span>
+          {/* URL Input */}
+          <div className="mb-5">
+            <label className="block text-sm font-semibold text-slate-700 mb-3">
+              Video URL
+            </label>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <Link2 className="w-5 h-5" />
               </div>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="Paste video link from YouTube, TikTok, X..."
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none text-slate-800 text-base transition-all placeholder:text-slate-400"
+              />
             </div>
-          </label>
+          </div>
+
+          {/* Download Options */}
+          <div className="mb-5">
+            <label className="block text-sm font-semibold text-slate-700 mb-3">
+              Download Options
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {DOWNLOAD_OPTIONS.map((opt) => {
+                const Icon = opt.icon
+                const isSelected = selectedOptions.includes(opt.id)
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => toggleOption(opt.id)}
+                    className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                      isSelected
+                        ? `border-${opt.color}-500 bg-${opt.color}-50`
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      isSelected ? `bg-${opt.color}-500` : 'bg-slate-100'
+                    }`}>
+                      <Icon className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold ${isSelected ? `text-${opt.color}-700` : 'text-slate-700'}`}>
+                          {opt.label}
+                        </span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${isSelected ? `bg-${opt.color}-200 text-${opt.color}-700` : 'bg-slate-100 text-slate-500'}`}>
+                          {opt.format}
+                        </span>
+                      </div>
+                      <p className={`text-xs mt-1 ${isSelected ? `text-${opt.color}-600` : 'text-slate-400'}`}>
+                        {opt.description}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <div className={`w-6 h-6 rounded-full bg-${opt.color}-500 flex items-center justify-center flex-shrink-0`}>
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {error && (
-            <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center gap-3">
-              <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
               <p className="text-red-600 text-sm">{error}</p>
             </div>
           )}
 
           <button
             onClick={handleSubmit}
-            disabled={loading}
-            className="mt-5 w-full py-4 rounded-2xl font-bold text-white text-lg bg-gradient-to-r from-[#FF6B35] via-orange-500 to-pink-500 hover:shadow-xl hover:shadow-orange-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={loading || selectedOptions.length === 0}
+            className="w-full py-4 rounded-2xl font-bold text-white text-lg bg-gradient-to-r from-orange-500 via-orange-400 to-pink-500 hover:shadow-xl hover:shadow-orange-200/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                处理中...
+                Processing...
               </>
             ) : (
               <>
                 <Download className="w-5 h-5" />
-                开始下载
+                Start Download
               </>
             )}
           </button>
+
+          {selectedOptions.length === 0 && (
+            <p className="mt-3 text-center text-sm text-orange-500">
+              Please select at least one download option
+            </p>
+          )}
         </div>
 
-        {/* 当前任务 */}
+        {/* 任务状态 */}
         {task && (
-          <div className="bg-white rounded-3xl shadow-lg shadow-orange-100/50 p-6 border border-orange-100">
+          <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 p-6 border border-slate-100">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">📊 任务进度</h3>
+              <h3 className="text-lg font-bold text-slate-800">Download Progress</h3>
               <button 
                 onClick={() => setTask(null)}
-                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
               >
-                <XCircle className="w-5 h-5 text-gray-500" />
+                <XCircle className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
-            {/* 状态卡片 */}
             <div className={`p-4 rounded-2xl mb-5 ${
               task.status === 'completed' ? 'bg-green-50 border border-green-200' :
               task.status === 'error' ? 'bg-red-50 border border-red-200' :
@@ -393,7 +366,7 @@ function App() {
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                   task.status === 'completed' ? 'bg-green-500' :
                   task.status === 'error' ? 'bg-red-500' :
-                  'bg-gradient-to-br from-[#FF6B35] to-orange-500'
+                  'bg-gradient-to-br from-orange-500 to-pink-500'
                 }`}>
                   {task.status === 'completed' && <CheckCircle2 className="w-6 h-6 text-white" />}
                   {task.status === 'error' && <XCircle className="w-6 h-6 text-white" />}
@@ -408,16 +381,18 @@ function App() {
                     task.status === 'error' ? 'text-red-700' :
                     'text-orange-700'
                   }`}>
-                    {task.status === 'completed' && '下载完成！'}
-                    {task.status === 'error' && '下载失败'}
-                    {task.status === 'pending' && '等待中...'}
-                    {task.status === 'processing' && '准备下载...'}
-                    {task.status === 'downloading' && '正在下载视频...'}
-                    {task.status === 'asr' && '语音识别中...'}
+                    {task.status === 'completed' && 'Download Complete!'}
+                    {task.status === 'error' && 'Download Failed'}
+                    {task.status === 'pending' && 'Waiting...'}
+                    {task.status === 'processing' && 'Processing...'}
+                    {task.status === 'downloading' && 'Downloading Video...'}
+                    {task.status === 'asr' && 'Transcribing Audio...'}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-slate-500">
                     {task.platform && `${task.platform} · `}
-                    {getStatusText(task.status)}
+                    {task.status === 'completed' ? 'Ready to download' : 
+                     task.status === 'error' ? 'Please try again' : 
+                     'Please wait...'}
                   </p>
                 </div>
               </div>
@@ -426,13 +401,13 @@ function App() {
             {/* 进度条 */}
             {(task.status === 'processing' || task.status === 'downloading' || task.status === 'asr') && (
               <div className="mb-5">
-                <div className="flex justify-between text-sm text-gray-600 mb-2">
-                  <span>下载进度</span>
+                <div className="flex justify-between text-sm text-slate-600 mb-2">
+                  <span>Download Progress</span>
                   <span className="font-medium">{task.progress}%</span>
                 </div>
-                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-[#FF6B35] via-orange-500 to-pink-500 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-orange-500 via-orange-400 to-pink-500 rounded-full transition-all duration-500"
                     style={{ width: `${task.progress}%` }}
                   />
                 </div>
@@ -441,17 +416,17 @@ function App() {
 
             {/* 视频信息 */}
             {task.title && (
-              <div className="flex gap-4 mb-5 p-4 bg-gray-50 rounded-2xl">
+              <div className="flex gap-4 mb-5 p-4 bg-slate-50 rounded-2xl">
                 {task.thumbnail && (
                   <img 
                     src={task.thumbnail} 
                     alt={task.title}
-                    className="w-24 h-16 object-cover rounded-xl"
+                    className="w-28 h-20 object-cover rounded-xl"
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800 truncate">{task.title}</p>
-                  <p className="text-sm text-gray-500 mt-1">{task.platform}</p>
+                  <p className="font-medium text-slate-800 line-clamp-2">{task.title}</p>
+                  <p className="text-sm text-slate-500 mt-1">{task.platform}</p>
                 </div>
               </div>
             )}
@@ -464,7 +439,7 @@ function App() {
                 className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl font-bold text-white text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-xl hover:shadow-green-200 transition-all"
               >
                 <Download className="w-5 h-5" />
-                下载视频文件
+                Download Video
               </a>
             )}
 
@@ -473,16 +448,16 @@ function App() {
               <div className="mt-5 p-5 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border border-purple-100">
                 <div className="flex items-center gap-2 mb-3">
                   <Mic className="w-5 h-5 text-purple-600" />
-                  <h4 className="font-bold text-purple-800">语音识别结果</h4>
+                  <h4 className="font-bold text-purple-800">Transcription Result</h4>
                 </div>
                 <div className="max-h-48 overflow-y-auto">
-                  <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{task.asrText}</p>
+                  <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{task.asrText}</p>
                 </div>
                 <button
-                  onClick={() => copyToClipboard(task.asrText!)}
+                  onClick={() => navigator.clipboard.writeText(task.asrText!)}
                   className="mt-3 text-xs text-purple-600 hover:text-purple-800 font-medium"
                 >
-                  复制文字
+                  Copy Text
                 </button>
               </div>
             )}
@@ -498,33 +473,33 @@ function App() {
 
         {/* 历史记录 */}
         {history.length > 0 && (
-          <div className="bg-white rounded-3xl shadow-lg shadow-gray-100/50 overflow-hidden border border-gray-100">
+          <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 overflow-hidden border border-slate-100">
             <button
               onClick={() => setShowHistory(!showHistory)}
-              className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
                   <Download className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-800">下载历史</h3>
-                  <p className="text-sm text-gray-500">{history.length} 个任务</p>
+                  <h3 className="font-bold text-slate-800">Download History</h3>
+                  <p className="text-sm text-slate-500">{history.length} tasks</p>
                 </div>
               </div>
-              <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
             </button>
             
             {showHistory && (
-              <div className="border-t border-gray-100">
+              <div className="border-t border-slate-100">
                 {history.map((item) => (
-                  <div key={item.taskId} className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0">
+                  <div key={item.taskId} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-b-0">
                     <div className="flex-shrink-0">
                       {getStatusIcon(item.status)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 truncate">{item.title || '未命名视频'}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-medium text-slate-800 truncate">{item.title || 'Untitled Video'}</p>
+                      <p className="text-sm text-slate-500">
                         {item.platform} · {new Date(item.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -532,7 +507,7 @@ function App() {
                       onClick={() => handleDelete(item.taskId)}
                       className="p-2 hover:bg-red-50 rounded-lg transition-colors"
                     >
-                      <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                      <Trash2 className="w-4 h-4 text-slate-400 hover:text-red-500" />
                     </button>
                   </div>
                 ))}
@@ -540,63 +515,12 @@ function App() {
             )}
           </div>
         )}
-
-        {/* 使用说明 */}
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl p-6 border border-indigo-100">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-500" />
-            使用说明
-          </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-orange-600 font-bold text-sm">1</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-800 text-sm">粘贴链接</p>
-                <p className="text-xs text-gray-500">从抖音、YouTube 等平台复制分享链接</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-orange-600 font-bold text-sm">2</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-800 text-sm">选择平台</p>
-                <p className="text-xs text-gray-500">系统会自动识别，也可手动选择</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-orange-600 font-bold text-sm">3</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-800 text-sm">开启 ASR</p>
-                <p className="text-xs text-gray-500">需要提取语音文字时勾选此选项</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-orange-600 font-bold text-sm">4</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-800 text-sm">开始下载</p>
-                <p className="text-xs text-gray-500">等待完成即可下载视频文件</p>
-              </div>
-            </div>
-          </div>
-          <div className="mt-5 p-4 bg-yellow-50 rounded-2xl border border-yellow-100">
-            <p className="text-yellow-700 text-sm flex items-center gap-2">
-              <span className="text-lg">⚠️</span>
-              请尊重版权，仅供个人学习使用，严禁商用或传播
-            </p>
-          </div>
-        </div>
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-8 text-gray-400 text-sm">
-        <p>小电驴 v1.2.0 · Powered by yt-dlp & Whisper</p>
+      <footer className="text-center py-8 text-slate-400 text-sm">
+        <p>Little Electric Donkey v1.2.0 · Powered by yt-dlp & Whisper</p>
+        <p className="mt-1 text-xs">Please respect copyright laws. For personal use only.</p>
       </footer>
     </div>
   )

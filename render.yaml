@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: xiaodianlv
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: cd backend && npm install && cd ../frontend && npm install && npm run build
+    startCommand: cd backend && node src/app.js
+    branch: master
+    repo: https://github.com/Tangduole/xiaodianlv
+    envVars:
+      - key: NODE_ENV
+        value: production

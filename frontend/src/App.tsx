@@ -56,7 +56,7 @@ interface HistoryTask {
   createdAt: string
 }
 
-type DownloadOption = 'video' | 'copywriting' | 'cover' | 'audio' | 'subtitle'
+type DownloadOption = 'video' | 'copywriting' | 'cover' | 'asr' | 'subtitle'
 
 interface OptionConfig {
   id: DownloadOption
@@ -71,7 +71,7 @@ const DOWNLOAD_OPTIONS: OptionConfig[] = [
   { id: 'video',       label: '视频',         desc: '下载视频文件',      icon: Video,      color: 'text-orange-500',  activeColor: 'bg-orange-500' },
   { id: 'copywriting', label: '文案',         desc: '提取视频文案',      icon: FileText,   color: 'text-blue-500',    activeColor: 'bg-blue-500' },
   { id: 'cover',       label: '封面',         desc: '下载视频封面',      icon: ImageIcon,  color: 'text-pink-500',    activeColor: 'bg-pink-500' },
-  { id: 'audio',       label: '原声',         desc: '提取视频原声',      icon: Music,      color: 'text-purple-500', activeColor: 'bg-purple-500' },
+  { id: 'asr',        label: '语音转文字',   desc: '语音转文字字幕',    icon: Mic,        color: 'text-purple-500', activeColor: 'bg-purple-500' },
   { id: 'subtitle',    label: 'YouTube中文字幕', desc: '下载中文字幕',    icon: Languages,  color: 'text-green-500',   activeColor: 'bg-green-500' },
 ]
 

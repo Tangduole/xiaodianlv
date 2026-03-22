@@ -27,7 +27,12 @@ async function createDownload(req, res) {
       return res.json({ code: 400, message: validation.message });
     }
 
-    const { url, platform, needAsr = false, options = ['video'], saveTarget = 'phone' } = req.body;
+    let { url, platform, needAsr = false, options = ['video'], saveTarget = 'phone' } = req.body;
+
+    // 从分享文本中提取 URL
+    const { extractUrl } = require('../utils/validator');
+    const extracted = extractUrl(url);
+    if (extracted) url = extracted;
 
     const limitStatus = getLimiterStatus();
     if (limitStatus.queued >= 10) {

@@ -10,11 +10,60 @@
 const ALLOWED_PLATFORMS = new Set(['douyin', 'tiktok', 'x', 'twitter', 'youtube', 'bilibili', 'kuaishou', 'auto']);
 
 /**
+ * 从分享文本中提取 URL
+ * 支持抖音/TikTok/YouTube 等平台的分享文案
+ */
+function extractUrl(text) {
+  if (!text || typeof text !== 'string') return '';
+  
+  // 匹配 URL（http/https 开头，或常见短链接域名）
+  const urlPatterns = [
+    /https?:\/\/[^\s<>\"')\]]+/gi,
+    /[a-z0-9-]+\.(com|cn|net|org|io|cc|co)\/[^\s<>\"')\]]+/gi,
+  ];
+  
+  // 平台特定域名优先
+  const platformDomains = [
+    'douyin.com', 'douyin.cn', 'iesdouyin.com',
+    'tiktok.com', 'tiktok.cn',
+    'x.com', 'twitter.com',
+    'youtube.com', 'youtu.be',
+    'bilibili.com', 'b23.tv',
+    'kuaishou.com',
+    'instagram.com',
+    'xiaohongshu.com', 'xhslink.com',
+  ];
+  
+  for (const pattern of urlPatterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      // 优先返回平台域名链接
+      for (const m of matches) {
+        for (const domain of platformDomains) {
+          if (m.includes(domain)) return m.trim();
+        }
+      }
+      // 没有匹配平台域名，返回第一个 URL
+      return matches[0].trim();
+    }
+  }
+  
+  return text.trim();
+}
+
+/**
  * 验证视频链接格式
  */
 function validateUrl(url, platform) {
   if (!url || typeof url !== 'string') {
     return { valid: false, message: '链接不能为空' };
+  }
+
+  // 从分享文本中提取 URL
+  const extracted = extractUrl(url);
+  if (extracted && extracted !== url.trim()) {
+    // 存储提取后的 URL 供后续使用
+    url = extracted;
   }
 
   url = url.trim();
@@ -92,7 +141,14 @@ function validatePlatform(platform) {
  * 完整验证
  */
 function validateInput(data) {
-  const { url, platform } = data;
+  let { url, platform } = data;
+
+  // 从分享文本中提取 URL
+  const extracted = extractUrl(url);
+  if (extracted && extracted !== url.trim()) {
+    url = extracted;
+    data.url = extracted;
+  }
 
   const urlResult = validateUrl(url, platform);
   if (!urlResult.valid) return urlResult;
@@ -107,5 +163,6 @@ module.exports = {
   validateInput,
   validateUrl,
   validatePlatform,
+  extractUrl,
   ALLOWED_PLATFORMS
 };

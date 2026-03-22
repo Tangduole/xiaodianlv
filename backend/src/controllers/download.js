@@ -38,13 +38,20 @@ async function createDownload(req, res) {
     const detectedPlatform = detectPlatform(url);
     const finalPlatform = platform || detectedPlatform || 'auto';
 
+    // 兼容：前端 'audio' 选项
+    const normalizedOptions = (Array.isArray(options) ? options : [options]).map(
+      o => o === 'asr' ? 'audio' : o
+    );
+
+    const wantsAsr = needAsr;
+
     const taskId = uuidv4();
     const task = {
       taskId,
       url: url.trim(),
       platform: finalPlatform,
-      needAsr: needAsr || options.includes('asr'),
-      options: Array.isArray(options) ? options : [options],
+      needAsr: wantsAsr,
+      options: normalizedOptions,
       saveTarget,
       status: 'pending',
       progress: 0,
@@ -54,7 +61,7 @@ async function createDownload(req, res) {
     store.save(task);
 
     // 异步执行下载
-    processDownload(taskId, url, task.needAsr, task.options).catch(err => {
+    processDownload(taskId, url, wantsAsr, normalizedOptions).catch(err => {
       console.error(`[task] ${taskId} failed:`, err);
       store.update(taskId, {
         status: 'error',
@@ -102,6 +109,7 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
     const wantsVideo = options.includes('video');
     const wantsCopywriting = options.includes('copywriting');
     const wantsCover = options.includes('cover');
+    const wantsAudio = options.includes('audio');
     const wantsSubtitle = options.includes('subtitle');
 
     // 1. 解析阶段
@@ -109,8 +117,8 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
 
     let result = null;
 
-    // 2. 下载视频（如果需要视频、封面、字幕或ASR，都需要先下载）
-    if (wantsVideo || wantsCover || wantsSubtitle || needAsr) {
+    // 2. 需要实际下载的情况
+    if (wantsVideo || wantsCover || wantsSubtitle || wantsAudio || needAsr) {
       store.update(taskId, { status: 'downloading', progress: 10 });
 
       result = await downloadWithLimit(async () => {
@@ -146,6 +154,17 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
         update.coverUrl = result.thumbnailUrl;
       }
 
+      // 原声音频
+      if (wantsAudio) {
+        try {
+          const audioPath = path.join(path.dirname(result.filePath), `${taskId}_audio.mp3`);
+          await ytdlp.extractAudio(result.filePath, audioPath);
+          update.audioUrl = `/download/${path.basename(audioPath)}`;
+        } catch (audioErr) {
+          console.error(`[audio] ${taskId} extract failed:`, audioErr);
+        }
+      }
+
       // 字幕
       if (wantsSubtitle && result.subtitleFiles && result.subtitleFiles.length > 0) {
         update.subtitleFiles = result.subtitleFiles;
@@ -173,11 +192,7 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
           path.dirname(result.filePath),
           `${taskId}.mp3`
         );
-
-        // 提取音频
         await ytdlp.extractAudio(result.filePath, audioPath);
-
-        // ASR 转录
         const text = await asr.transcribe(audioPath);
 
         store.update(taskId, {
@@ -185,25 +200,17 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
           asrText: text
         });
 
-        // 清理音频文件
-        if (fs.existsSync(audioPath)) {
-          fs.unlinkSync(audioPath);
-        }
+        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
       } catch (asrError) {
         console.error(`[ASR] ${taskId} failed:`, asrError);
-        store.update(taskId, {
-          asrError: asrError.message
-        });
+        store.update(taskId, { asrError: asrError.message });
       }
     }
 
     console.log(`[task] ${taskId} completed`);
   } catch (error) {
     console.error(`[task] ${taskId} failed:`, error);
-    store.update(taskId, {
-      status: 'error',
-      error: error.message
-    });
+    store.update(taskId, { status: 'error', error: error.message });
   }
 }
 
@@ -259,6 +266,7 @@ function getStatus(req, res) {
       asrError: task.asrError,
       copyText: task.copyText,
       coverUrl: task.coverUrl,
+      audioUrl: task.audioUrl,
       error: task.error,
       createdAt: task.createdAt
     }

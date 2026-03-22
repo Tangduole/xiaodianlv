@@ -11,7 +11,6 @@ import {
   FileText,
   ImageIcon,
   Languages,
-  Subtitles,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -140,7 +139,7 @@ function App() {
   const [showHistory, setShowHistory] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [previewInfo, setPreviewInfo] = useState<any>(null)
-  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // URL 输入时自动识别平台
   const handleUrlChange = (value: string) => {

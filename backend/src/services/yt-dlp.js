@@ -40,8 +40,6 @@ function download(url, taskId, onProgress) {
       '--ignore-errors',
       '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
       '--write-thumbnail',      // 下载封面
-      '--thumbnail-format', 'jpg',
-      '--convert-thumbnails', 'jpg',
       '--write-auto-subs',      // 下载自动字幕
       '--sub-langs', 'zh-Hans,zh-Hant,en',
       '--sub-format', 'srt',

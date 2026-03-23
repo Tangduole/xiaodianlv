@@ -2,41 +2,64 @@
  * 抖音图文(note)下载服务
  * 
  * 抖音 /note/ 路径的图文作品，yt-dlp 不支持
- * 通过抓取页面 API 获取图片列表
+ * 通过 HTTP 抓取页面，提取图片列表
  */
 
-const axios = require('axios');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 
 /**
- * 获取抖音 redirect 后的真实 URL
+ * HTTP GET 请求（用 Node 内置模块，不依赖 axios）
  */
-async function resolveUrl(shortUrl) {
-  try {
-    const res = await axios.get(shortUrl, {
-      maxRedirects: 5,
-      timeout: 15000,
+function httpGet(rawUrl, options = {}) {
+  return new Promise((resolve, reject) => {
+    const timeout = options.timeout || 15000;
+    const url = new URL(rawUrl);
+    const client = url.protocol === 'https:' ? https : http;
+    
+    const req = client.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15'
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Referer': 'https://www.douyin.com/',
+        ...options.headers
+      }
+    }, (res) => {
+      // 跟随重定向
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        return httpGet(res.headers.location, options).then(resolve).catch(reject);
+      }
+      
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      
+      if (options.responseType === 'arraybuffer') {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+      } else {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => resolve({
+          body: Buffer.concat(chunks).toString('utf-8'),
+          finalUrl: url.href
+        }));
       }
     });
-    return res.request.res.responseUrl || shortUrl;
-  } catch (e) {
-    // 手动从 error 获取重定向 URL
-    if (e.response && e.response.request && e.response.request.res) {
-      return e.response.request.res.responseUrl || shortUrl;
-    }
-    return shortUrl;
-  }
+    
+    req.on('error', reject);
+    req.setTimeout(timeout, () => { req.destroy(); reject(new Error('请求超时')); });
+  });
 }
 
 /**
  * 从抖音页面提取 aweme_id
  */
 function extractAwemeId(url) {
-  // /note/7618008136192932346
   let match = url.match(/\/note\/(\d+)/);
   if (match) return match[1];
-  // /video/7486945365568488246
   match = url.match(/\/video\/(\d+)/);
   if (match) return match[1];
   return null;
@@ -44,163 +67,145 @@ function extractAwemeId(url) {
 
 /**
  * 下载抖音图文作品
- * @param {string} url 抖音链接
- * @param {string} taskId 任务 ID
- * @param {function} onProgress 进度回调
- * @returns {Promise<{title, images: Array, thumbnailUrl, duration}>}
  */
 async function downloadDouyinNote(url, taskId, onProgress) {
-  if (onProgress) onProgress(5);
-
-  // 1. 解析短链接
-  const resolvedUrl = await resolveUrl(url);
-  const awemeId = extractAwemeId(resolvedUrl);
-  
-  if (!awemeId) {
-    throw new Error('无法解析抖音作品 ID');
-  }
-
-  if (onProgress) onProgress(15);
-
-  // 2. 通过 API 获取作品详情
-  const apiUrl = `https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=${awemeId}`;
-  
-  let data;
-  try {
-    const res = await axios.get(apiUrl, {
-      timeout: 15000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
-        'Referer': 'https://www.douyin.com/',
-        'Accept': 'application/json',
-      }
-    });
-    data = res.data;
-  } catch (e) {
-    // 尝试移动端 API
-    try {
-      const mApiUrl = `https://www.iesdouyin.com/share/video/${awemeId}`;
-      const res = await axios.get(mApiUrl, {
-        timeout: 15000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15'
-        }
-      });
-      // 从页面提取 JSON 数据
-      const jsonMatch = res.data.match(/window\._ROUTER_DATA\s*=\s*(\{.+?\})\s*<\/script>/s);
-      if (jsonMatch) {
-        data = JSON.parse(jsonMatch[1]);
-      }
-    } catch (e2) {
-      // 最后尝试：直接抓取页面 HTML
-      try {
-        const res = await axios.get(resolvedUrl, {
-          timeout: 15000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15'
-          }
-        });
-        // 尝试从 RENDER_DATA 提取
-        const renderMatch = res.data.match(/self\.__pace_f\.push\(\[.*?"(\{\\?"aweme_id.*?\})".*?\]\)/s);
-        if (renderMatch) {
-          const parsed = JSON.parse(renderMatch[1].replace(/\\"/g, '"').replace(/\\\\"/g, '"'));
-          data = parsed;
-        } else {
-          // 从 script 标签提取
-          const scriptMatch = res.data.match(/<script[^>]*id="RENDER_DATA"[^>]*>(.*?)<\/script>/s);
-          if (scriptMatch) {
-            data = JSON.parse(decodeURIComponent(scriptMatch[1]));
-          }
-        }
-      } catch (e3) {
-        throw new Error('无法获取抖音作品详情，可能需要登录或作品已被删除');
-      }
-    }
-  }
-
-  if (onProgress) onProgress(40);
-
-  // 3. 从返回数据中提取图片和标题
-  const awemeDetail = data?.aweme_detail || data?.detail || data;
-  const desc = awemeDetail?.desc || awemeDetail?.title || '抖音图文作品';
-  const images = [];
-  
-  // 从不同数据结构中提取图片 URL
-  const imageList = awemeDetail?.images || 
-                    awemeDetail?.image_list || 
-                    awemeDetail?.aweme_info?.images ||
-                    [];
-  
-  for (const img of imageList) {
-    const urlList = img?.url_list || img?.urlList || [];
-    if (urlList.length > 0) {
-      // 优先取最高质量（最后一个通常是原图）
-      images.push(urlList[urlList.length - 1]);
-    }
-  }
-
-  if (images.length === 0) {
-    // 可能是视频而不是图文
-    const videoUrl = awemeDetail?.video?.play_addr?.url_list?.[0] ||
-                     awemeDetail?.video?.bit_rate?.[0]?.play_addr?.url_list?.[0];
-    if (videoUrl) {
-      throw new Error('这是一个视频作品，不是图文。视频下载请使用普通视频链接。');
-    }
-    throw new Error('未能提取到图片，作品可能已被删除或需要登录查看');
-  }
-
-  if (onProgress) onProgress(60);
-
-  // 4. 下载图片到本地
   const fs = require('fs');
   const path = require('path');
-  const downloadDir = path.join(__dirname, '../../downloads');
-  if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
-
-  const downloadedImages = [];
-  for (let i = 0; i < images.length; i++) {
+  
+  if (onProgress) onProgress(5);
+  
+  // 1. 解析短链接获取真实 URL
+  let resolvedUrl;
+  try {
+    const res = await httpGet(url);
+    resolvedUrl = res.finalUrl || url;
+  } catch {
+    resolvedUrl = url;
+  }
+  
+  const awemeId = extractAwemeId(resolvedUrl);
+  if (!awemeId) {
+    throw new Error('无法解析作品 ID');
+  }
+  if (onProgress) onProgress(15);
+  
+  // 2. 尝试多种方式获取作品数据
+  let desc = '抖音图文作品';
+  let imageUrls = [];
+  
+  // 方式 1: 移动端分享页面
+  try {
+    const res = await httpGet(`https://www.iesdouyin.com/share/video/${awemeId}`);
+    const body = res.body;
+    
+    // 从 _ROUTER_DATA 提取
+    const routerMatch = body.match(/self\.__pace_f\.push\(\[\s*\d+,\s*"[^"]*?",\s*(\{.*?\})\s*\]\)/s);
+    if (routerMatch) {
+      try {
+        const raw = routerMatch[1].replace(/\\x22/g, '"').replace(/\\u002F/g, '/').replace(/\\"/g, '"');
+        const data = JSON.parse(raw);
+        desc = data?.aweme?.detail?.desc || data?.desc || desc;
+        const imgs = data?.aweme?.detail?.images || data?.images || [];
+        imageUrls = imgs.map(img => {
+          const urls = img?.url_list || [];
+          return urls[urls.length - 1] || urls[0] || '';
+        }).filter(Boolean);
+      } catch {}
+    }
+    
+    // 从 RENDER_DATA 提取
+    if (imageUrls.length === 0) {
+      const renderMatch = body.match(/<script[^>]*id="RENDER_DATA"[^>]*>(.*?)<\/script>/s);
+      if (renderMatch) {
+        try {
+          const decoded = decodeURIComponent(renderMatch[1]);
+          const data = JSON.parse(decoded);
+          const detail = data?.aweme?.detail || data?.detail || {};
+          desc = detail?.desc || desc;
+          const imgs = detail?.images || [];
+          imageUrls = imgs.map(img => {
+            const urls = img?.url_list || [];
+            return urls[urls.length - 1] || urls[0] || '';
+          }).filter(Boolean);
+        } catch {}
+      }
+    }
+  } catch (e) {
+    console.log('[douyin-note] share page failed:', e.message);
+  }
+  
+  // 方式 2: 直接抓取 PC 页面
+  if (imageUrls.length === 0) {
     try {
-      const imgRes = await axios.get(images[i], {
-        responseType: 'arraybuffer',
-        timeout: 30000,
+      const res = await httpGet(resolvedUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
-          'Referer': 'https://www.douyin.com/'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+          'Cookie': 'ttwid=1'
         }
       });
+      const body = res.body;
+      
+      // 尝试从 _ROUTER_DATA 提取
+      const matches = body.matchAll(/self\.__pace_f\.push\(\[\s*\d+,\s*"[^"]*?",\s*(\{.*?\})\s*\]\)/gs);
+      for (const m of matches) {
+        try {
+          const raw = m[1].replace(/\\x22/g, '"').replace(/\\u002F/g, '/').replace(/\\"/g, '"');
+          const data = JSON.parse(raw);
+          if (data?.aweme?.detail) {
+            const detail = data.aweme.detail;
+            desc = detail.desc || desc;
+            const imgs = detail.images || [];
+            imageUrls = imgs.map(img => {
+              const urls = img?.url_list || [];
+              return urls[urls.length - 1] || urls[0] || '';
+            }).filter(Boolean);
+            break;
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.log('[douyin-note] PC page failed:', e.message);
+    }
+  }
+  
+  if (onProgress) onProgress(40);
+  
+  if (imageUrls.length === 0) {
+    throw new Error('无法提取图片。可能原因：1) 作品已被删除 2) 需要登录才能查看 3) 不是图文作品');
+  }
+  
+  // 3. 下载图片
+  const downloadDir = path.join(__dirname, '../../downloads');
+  if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
+  
+  const downloadedImages = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    try {
+      const buf = await httpGet(imageUrls[i], { responseType: 'arraybuffer', timeout: 30000 });
       const filename = `${taskId}_${i + 1}.jpg`;
       const filepath = path.join(downloadDir, filename);
-      fs.writeFileSync(filepath, imgRes.data);
-      downloadedImages.push({
-        filename,
-        path: filepath,
-        url: `/download/${filename}`
-      });
-    } catch (imgErr) {
-      console.error(`[douyin-note] Image ${i + 1} download failed:`, imgErr.message);
+      fs.writeFileSync(filepath, buf);
+      downloadedImages.push({ filename, path: filepath, url: `/download/${filename}` });
+    } catch (e) {
+      console.error(`[douyin-note] image ${i + 1} failed:`, e.message);
     }
-    if (onProgress) onProgress(60 + Math.round((i + 1) / images.length * 35));
+    if (onProgress) onProgress(40 + Math.round((i + 1) / imageUrls.length * 55));
   }
-
-  const thumbnailUrl = downloadedImages.length > 0 ? downloadedImages[0].url : '';
-
+  
   if (onProgress) onProgress(100);
-
+  
   return {
     title: desc,
     images: downloadedImages,
-    thumbnailUrl,
+    thumbnailUrl: downloadedImages.length > 0 ? downloadedImages[0].url : '',
     duration: 0,
     ext: 'note',
     isNote: true
   };
 }
 
-/**
- * 检测是否是抖音图文链接
- */
 function isDouyinNote(url) {
   return /douyin\.com\/note\//.test(url);
 }
 
-module.exports = { downloadDouyinNote, isDouyinNote, resolveUrl, extractAwemeId };
+module.exports = { downloadDouyinNote, isDouyinNote };

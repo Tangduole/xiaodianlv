@@ -130,8 +130,13 @@ async function parseDouyinPage(url) {
     if (obj.play_addr && obj.play_addr.url_list) {
       const urls = obj.play_addr.url_list;
       // 过滤 playwm（水印版），优先无水印
-      const noWatermark = urls.find(u => !u.includes('playwm') && u.includes('video_id'));
-      const playUrl = noWatermark || urls[0];
+      // 优先无水印：play → playwm 替换
+      let playUrl = urls[0] || '';
+      if (playUrl.includes('playwm')) {
+        const noWm = playUrl.replace('/playwm/', '/play/');
+        // 保留第一个用于尝试
+        playUrl = noWm;
+      }
       if (playUrl && (playUrl.includes('.mp4') || playUrl.includes('video_id'))) {
         if (obj.bit_rate || obj.width > 0 || playUrl.includes('aweme')) {
           result.videoUrl = playUrl;

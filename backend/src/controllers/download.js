@@ -75,7 +75,17 @@ async function createDownload(req, res) {
       return res.json({ code: 0, data: { taskId, status: 'pending', platform: finalPlatform } });
     }
 
-    // 异步执行下载
+    // X/Twitter 链接：走专用下载器
+    const { isXUrl } = require('../services/x-download');
+    if (isXUrl(url)) {
+      processX(taskId, url, wantsAsr, normalizedOptions).catch(err => {
+        console.error(`[task] ${taskId} x failed:`, err);
+        store.update(taskId, { status: 'error', progress: 0, error: err.message });
+      });
+      return res.json({ code: 0, data: { taskId, status: 'pending', platform: finalPlatform } });
+    }
+
+    // 其他平台：走 yt-dlp
     processDownload(taskId, url, wantsAsr, normalizedOptions).catch(err => {
       console.error(`[task] ${taskId} failed:`, err);
       store.update(taskId, {
@@ -269,6 +279,41 @@ async function processDouyin(taskId, url, needAsr, options = ['video']) {
     console.log(`[task] ${taskId} douyin completed (images=${result.images?.length || 0}, video=${!!result.downloadUrl})`);
   } catch (error) {
     console.error(`[task] ${taskId} douyin failed:`, error);
+    store.update(taskId, { status: 'error', error: error.message });
+  }
+}
+
+/**
+ * 处理 X/Twitter 下载
+ */
+async function processX(taskId, url, needAsr, options = ['video']) {
+  try {
+    const { downloadX } = require('../services/x-download');
+    store.update(taskId, { status: 'parsing', progress: 5 });
+    const result = await downloadX(url, taskId, (percent, msg) => {
+      store.update(taskId, {
+        status: percent < 30 ? 'parsing' : 'downloading',
+        progress: percent
+      });
+    });
+    const update = {
+      status: 'completed',
+      progress: 100,
+      title: result.title,
+      thumbnailUrl: result.thumbnailUrl,
+    };
+    if (result.downloadUrl) {
+      update.filePath = result.filePath;
+      update.ext = result.ext;
+      update.downloadUrl = result.downloadUrl;
+    }
+    if (result.images) {
+      update.imageFiles = result.images;
+    }
+    store.update(taskId, update);
+    console.log(`[task] ${taskId} x completed`);
+  } catch (error) {
+    console.error(`[task] ${taskId} x failed:`, error);
     store.update(taskId, { status: 'error', error: error.message });
   }
 }

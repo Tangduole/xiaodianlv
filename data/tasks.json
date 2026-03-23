@@ -1,0 +1,20 @@
+[
+  {
+    "taskId": "4e290b66-e310-4783-9afe-53c7a7197a45",
+    "url": "https://x.com/i/status/2035982819151741046",
+    "platform": "x",
+    "needAsr": false,
+    "options": [
+      "video"
+    ],
+    "saveTarget": "phone",
+    "status": "completed",
+    "progress": 100,
+    "createdAt": 1774273912575,
+    "title": "i: Wataa    被Cao的时候接了对象电话",
+    "thumbnailUrl": "",
+    "filePath": "/home/test/.openclaw/workspace-zhuangzhou/projects/P-001-xiaodianlv/backend/downloads/4e290b66-e310-4783-9afe-53c7a7197a45.mp4",
+    "ext": "mp4",
+    "downloadUrl": "/download/4e290b66-e310-4783-9afe-53c7a7197a45.mp4"
+  }
+]

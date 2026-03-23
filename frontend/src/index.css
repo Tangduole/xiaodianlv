@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0f172a;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* 去除移动端点击高亮 */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* 隐藏滚动条 */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 输入框聚焦动画 */
+input:focus { outline: none; }
+
+/* 平滑过渡 */
+button, a { transition: all 0.2s ease; }

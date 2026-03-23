@@ -1,27 +1,7 @@
-const CACHE_NAME = 'xiaodianlv-v2';
-const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) =>
-    Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-  ));
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/api/') || event.request.url.includes('/download/')) return;
-  event.respondWith(
-    fetch(event.request).then((response) => {
-      if (response.status === 200) {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-      }
-      return response;
-    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match('/index.html')))
-  );
+const CACHE_NAME = 'xiaodianlv-v3';
+self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/', '/index.html', '/manifest.json']))); self.skipWaiting(); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))); self.clients.claim(); });
+self.addEventListener('fetch', e => {
+  if (e.request.url.includes('/api/') || e.request.url.includes('/download/')) return;
+  e.respondWith(fetch(e.request).then(r => { if (r.status === 200) { const c = r.clone(); caches.open(CACHE_NAME).then(cache => cache.put(e.request, c)); } return r; }).catch(() => caches.match(e.request).then(c => c || caches.match('/index.html'))));
 });

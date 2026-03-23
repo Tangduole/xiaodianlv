@@ -65,12 +65,11 @@ async function createDownload(req, res) {
 
     store.save(task);
 
-    // 抖音图文 note 链接：走专用下载器
-    const { isDouyinNote } = require('../services/douyin-note');
-    if (isDouyinNote(url)) {
-      // 异步处理图文下载
-      processDouyinNote(taskId, url, wantsAsr, normalizedOptions).catch(err => {
-        console.error(`[task] ${taskId} note failed:`, err);
+    // 抖音链接：走专用下载器（不依赖 yt-dlp）
+    const { isDouyinUrl } = require('../services/douyin');
+    if (isDouyinUrl(url)) {
+      processDouyin(taskId, url, wantsAsr, normalizedOptions).catch(err => {
+        console.error(`[task] ${taskId} douyin failed:`, err);
         store.update(taskId, { status: 'error', progress: 0, error: err.message });
       });
       return res.json({ code: 0, data: { taskId, status: 'pending', platform: finalPlatform } });
@@ -231,18 +230,17 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
 }
 
 /**
- * 处理抖音图文(note)下载
+ * 处理抖音下载（视频/图文，不依赖 yt-dlp）
  */
-async function processDouyinNote(taskId, url, needAsr, options = ['video']) {
+async function processDouyin(taskId, url, needAsr, options = ['video']) {
   try {
-    const { downloadDouyinNote } = require('../services/douyin-note');
-    const path = require('path');
+    const { downloadDouyin } = require('../services/douyin');
 
     store.update(taskId, { status: 'parsing', progress: 5 });
 
-    const result = await downloadDouyinNote(url, taskId, (percent) => {
+    const result = await downloadDouyin(url, taskId, (percent, msg) => {
       store.update(taskId, {
-        status: percent < 40 ? 'parsing' : 'downloading',
+        status: percent < 30 ? 'parsing' : 'downloading',
         progress: percent
       });
     });
@@ -252,14 +250,25 @@ async function processDouyinNote(taskId, url, needAsr, options = ['video']) {
       progress: 100,
       title: result.title,
       thumbnailUrl: result.thumbnailUrl,
-      isNote: true,
-      imageFiles: result.images,
     };
 
+    if (result.isNote && result.images) {
+      update.isNote = true;
+      update.imageFiles = result.images;
+    }
+    if (result.downloadUrl) {
+      update.filePath = result.filePath;
+      update.ext = result.ext;
+      update.downloadUrl = result.downloadUrl;
+    }
+    if (result.audioUrl) {
+      update.audioUrl = result.audioUrl;
+    }
+
     store.update(taskId, update);
-    console.log(`[task] ${taskId} note completed (${result.images.length} images)`);
+    console.log(`[task] ${taskId} douyin completed (images=${result.images?.length || 0}, video=${!!result.downloadUrl})`);
   } catch (error) {
-    console.error(`[task] ${taskId} note failed:`, error);
+    console.error(`[task] ${taskId} douyin failed:`, error);
     store.update(taskId, { status: 'error', error: error.message });
   }
 }

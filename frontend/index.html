@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>小电驴 - 视频下载工具</title>
     <meta name="description" content="多平台视频下载 + 语音转文字" />
     <meta name="theme-color" content="#FF6B35" />
@@ -17,12 +20,10 @@
     <div id="root"></div>
     <script type="module" src="/main.tsx"></script>
     <script>
-      // 注册 Service Worker
+      // 强制清除旧 Service Worker 并注册新版
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('SW registered:', reg.scope))
-            .catch(err => console.log('SW registration failed:', err));
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(r => r.unregister());
         });
       }
     </script>

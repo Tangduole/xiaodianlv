@@ -34,6 +34,11 @@ async function createDownload(req, res) {
     const extracted = extractUrl(url);
     if (extracted) url = extracted;
 
+    // 抖音图文 note 链接暂不支持
+    if (/douyin\.com\/note\//.test(url)) {
+      return res.json({ code: 400, message: '暂不支持抖音图文作品，请尝试普通视频链接' });
+    }
+
     const limitStatus = getLimiterStatus();
     if (limitStatus.queued >= 10) {
       return res.json({ code: 429, message: '任务队列已满，请稍后再试' });

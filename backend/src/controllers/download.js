@@ -34,16 +34,6 @@ async function createDownload(req, res) {
     const extracted = extractUrl(url);
     if (extracted) url = extracted;
 
-    // 抖音图文 note 链接暂不支持
-    if (/douyin\.com\/note\//.test(url)) {
-      return res.json({ code: 400, message: '暂不支持抖音图文作品，请尝试普通视频链接' });
-    }
-
-    const limitStatus = getLimiterStatus();
-    if (limitStatus.queued >= 10) {
-      return res.json({ code: 429, message: '任务队列已满，请稍后再试' });
-    }
-
     // 平台自动识别
     const detectedPlatform = detectPlatform(url);
     const finalPlatform = platform || detectedPlatform || 'auto';
@@ -54,6 +44,11 @@ async function createDownload(req, res) {
     );
 
     const wantsAsr = needAsr;
+
+    const limitStatus = getLimiterStatus();
+    if (limitStatus.queued >= 10) {
+      return res.json({ code: 429, message: '任务队列已满，请稍后再试' });
+    }
 
     const taskId = uuidv4();
     const task = {
@@ -69,6 +64,17 @@ async function createDownload(req, res) {
     };
 
     store.save(task);
+
+    // 抖音图文 note 链接：走专用下载器
+    const { isDouyinNote } = require('../services/douyin-note');
+    if (isDouyinNote(url)) {
+      // 异步处理图文下载
+      processDouyinNote(taskId, url, wantsAsr, normalizedOptions).catch(err => {
+        console.error(`[task] ${taskId} note failed:`, err);
+        store.update(taskId, { status: 'error', progress: 0, error: err.message });
+      });
+      return res.json({ code: 0, data: { taskId, status: 'pending', platform: finalPlatform } });
+    }
 
     // 异步执行下载
     processDownload(taskId, url, wantsAsr, normalizedOptions).catch(err => {
@@ -225,6 +231,40 @@ async function processDownload(taskId, url, needAsr, options = ['video']) {
 }
 
 /**
+ * 处理抖音图文(note)下载
+ */
+async function processDouyinNote(taskId, url, needAsr, options = ['video']) {
+  try {
+    const { downloadDouyinNote } = require('../services/douyin-note');
+    const path = require('path');
+
+    store.update(taskId, { status: 'parsing', progress: 5 });
+
+    const result = await downloadDouyinNote(url, taskId, (percent) => {
+      store.update(taskId, {
+        status: percent < 40 ? 'parsing' : 'downloading',
+        progress: percent
+      });
+    });
+
+    const update = {
+      status: 'completed',
+      progress: 100,
+      title: result.title,
+      thumbnailUrl: result.thumbnailUrl,
+      isNote: true,
+      imageFiles: result.images,
+    };
+
+    store.update(taskId, update);
+    console.log(`[task] ${taskId} note completed (${result.images.length} images)`);
+  } catch (error) {
+    console.error(`[task] ${taskId} note failed:`, error);
+    store.update(taskId, { status: 'error', error: error.message });
+  }
+}
+
+/**
  * 平台自动识别
  */
 function detectPlatform(url) {
@@ -277,6 +317,8 @@ function getStatus(req, res) {
       copyText: task.copyText,
       coverUrl: task.coverUrl,
       audioUrl: task.audioUrl,
+      imageFiles: task.imageFiles,
+      isNote: task.isNote,
       error: task.error,
       createdAt: task.createdAt
     }

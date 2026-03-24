@@ -51,6 +51,9 @@ function detectPlatform(url: string): string {
 }
 
 export default function App() {
+  // 🧪 测试：这句话如果能看到说明 React 正常运行
+  console.log('✅ 小电驴 App 组件已加载')
+  
   const [url, setUrl] = useState('')
   const [detected, setDetected] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set(['video']))
